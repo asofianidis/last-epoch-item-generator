@@ -15,11 +15,22 @@ It refuses to generate anything if the game reports online play. Modifying the c
 | Option | Applies to | Range |
 | --- | --- | --- |
 | Rarity | Base items | Normal, Magic, Rare, Exalted |
+| Choose affixes | Base items | Opens the affix panel |
 | Min Legendary Potential | Uniques (ignored for sets) | 0 to 4 |
 | Item level | All | 1 to 100 |
 | Quantity | All | 1 to 20 |
 
-Affixes are rolled by the game's own generator, so you can't choose them. Items go to your inventory; once it's full, they drop at your feet.
+Items go to your inventory; once it's full, they drop at your feet.
+
+### Choosing affixes
+
+Tick **Choose affixes** and select a base item. The panel on the right lists the prefixes and suffixes the game allows on that item. Click one to add it, click it again to remove it, and set its tier with the slider.
+
+- Gear can have up to 2 prefixes and 2 suffixes. Idols are limited to 1 of each.
+- Tiers go as high as the game defines for each affix. Affixes the game marks as incompatible with T6 stop at T5.
+- The value within each tier is still rolled by the game.
+- Rarity follows from the affixes, and sealed affixes aren't supported.
+- Without **Choose affixes**, the game rolls the affixes as normal. Uniques and sets don't use this panel.
 
 ## Checking that it works
 
@@ -27,7 +38,7 @@ Each result is compared with the request, and differences are reported in the pa
 
 `F:\SteamLibrary\steamapps\common\Last Epoch\MelonLoader\Latest.log`
 
-The rarity values in `src/ItemSpawner.cs` are the most likely thing to need correcting, as they could not be confirmed without running the game.
+The rarity values and the tier numbering in `src/ItemSpawner.cs` are the most likely things to need correcting, as they could not be confirmed without running the game. If the tier you get doesn't match the slider, the log shows both the stored tier and the tier the game displays.
 
 ## Building
 

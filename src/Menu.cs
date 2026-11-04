@@ -1,6 +1,4 @@
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using Il2Cpp;
 using MelonLoader;
 using UnityEngine;
@@ -11,17 +9,19 @@ namespace LastEpochItemGenerator;
 internal static class Menu
 {
     private const float Width = 520f, RowHeight = 26f, Padding = 14f, DesignHeight = 1080f;
-    private const int PageSize = 12, MaxItemLevel = 100, MaxCount = 20, MaxLegendaryPotential = 4;
+    private const int MaxItemLevel = 100, MaxCount = 20, MaxLegendaryPotential = 4;
 
-    private static readonly Rect Panel = new(40f, 120f, Width, 610f);
+    private static readonly Rect Panel = new(40f, 120f, Width, 636f);
     private static readonly Rarity[] Rarities = (Rarity[])Enum.GetValues(typeof(Rarity));
+    private static readonly SearchList<CatalogEntry> Items = new(e => e.Label);
 
-    private static bool _visible, _inputBlocked, _drawErrorLogged, _catalogLoaded, _catalogErrorLogged, _showUniques;
-    private static string _search = "", _status = "";
-    private static int _page, _itemLevel = MaxItemLevel, _count = 1, _minLegendaryPotential;
+    private static bool _visible, _inputBlocked, _drawErrorLogged, _catalogLoaded, _catalogErrorLogged, _showUniques, _chooseAffixes;
+    private static string _status = "";
+    private static int _itemLevel = MaxItemLevel, _count = 1, _minLegendaryPotential;
     private static Rarity _rarity = Rarity.Rare;
     private static CatalogEntry _selected;
-    private static List<CatalogEntry> _matches = new();
+
+    private static bool ChoosingAffixes => _chooseAffixes && !_showUniques;
 
     internal static void Update()
     {
@@ -31,7 +31,7 @@ internal static class Menu
             if (_visible) LoadCatalog();
         }
 
-        // Typing in the search box must not trigger the game's hotkeys, so input stays off while the panel is open.
+        // Typing in a search box must not trigger the game's hotkeys, so input stays off while the panel is open.
         BlockGameInput(_visible);
     }
 
@@ -52,12 +52,19 @@ internal static class Menu
         }
     }
 
-    private static void DrawPanel()
+    internal static void DrawBackground(Rect panel)
     {
         var previous = GUI.color;
         GUI.color = new Color(0.05f, 0.06f, 0.08f, 0.96f);
-        GUI.DrawTexture(Panel, Texture2D.whiteTexture);
+        GUI.DrawTexture(panel, Texture2D.whiteTexture);
         GUI.color = previous;
+    }
+
+    internal static string Marked(string label, bool selected) => selected ? $"> {label} <" : label;
+
+    private static void DrawPanel()
+    {
+        DrawBackground(Panel);
 
         float x = Panel.x + Padding, y = Panel.y + 10f, w = Width - Padding * 2f;
 
@@ -83,10 +90,14 @@ internal static class Menu
         }
 
         DrawModeTabs(x, ref y, w);
-        DrawSearch(x, ref y, w);
-        DrawList(x, ref y, w);
+
+        var clicked = Items.Draw(x, ref y, w, e => e == _selected);
+        if (clicked != null && clicked != _selected) Select(clicked);
+
         DrawOptions(x, ref y, w);
         DrawGenerate(x, y, w);
+
+        if (ChoosingAffixes) AffixPanel.Draw(Panel);
     }
 
     private static void DrawModeTabs(float x, ref float y, float w)
@@ -94,36 +105,6 @@ internal static class Menu
         float half = (w - 6f) / 2f;
         if (GUI.Button(new Rect(x, y, half, RowHeight), Marked("Base items", !_showUniques))) SetMode(false);
         if (GUI.Button(new Rect(x + half + 6f, y, half, RowHeight), Marked("Uniques and sets", _showUniques))) SetMode(true);
-        y += RowHeight + 6f;
-    }
-
-    private static void DrawSearch(float x, ref float y, float w)
-    {
-        GUI.Label(new Rect(x, y, 60f, RowHeight), "Search");
-        string typed = GUI.TextField(new Rect(x + 60f, y, w - 60f, RowHeight - 2f), _search);
-        if (typed != _search)
-        {
-            _search = typed;
-            RefreshMatches();
-        }
-        y += RowHeight + 4f;
-    }
-
-    private static void DrawList(float x, ref float y, float w)
-    {
-        int pages = Math.Max(1, (_matches.Count + PageSize - 1) / PageSize);
-        _page = Math.Clamp(_page, 0, pages - 1);
-
-        foreach (var entry in _matches.Skip(_page * PageSize).Take(PageSize))
-        {
-            if (GUI.Button(new Rect(x, y, w, RowHeight - 2f), Marked(entry.Label, entry == _selected))) _selected = entry;
-            y += RowHeight;
-        }
-        y += RowHeight * (PageSize - Math.Min(PageSize, _matches.Count - _page * PageSize));
-
-        if (GUI.Button(new Rect(x, y, 70f, RowHeight - 2f), "Prev")) _page = Math.Max(0, _page - 1);
-        if (GUI.Button(new Rect(x + w - 70f, y, 70f, RowHeight - 2f), "Next")) _page = Math.Min(pages - 1, _page + 1);
-        GUI.Label(new Rect(x + 80f, y, w - 160f, RowHeight), $"Page {_page + 1} of {pages}  |  {_matches.Count} items");
         y += RowHeight + 6f;
     }
 
@@ -135,18 +116,27 @@ internal static class Menu
         }
         else
         {
-            float width = (w - 6f * (Rarities.Length - 1)) / Rarities.Length;
-            for (int i = 0; i < Rarities.Length; i++)
-            {
-                var rarity = Rarities[i];
-                if (GUI.Button(new Rect(x + i * (width + 6f), y, width, RowHeight - 2f), Marked(rarity.ToString(), rarity == _rarity))) _rarity = rarity;
-            }
+            _chooseAffixes = GUI.Toggle(new Rect(x, y, w, RowHeight - 2f), _chooseAffixes, " Choose affixes");
+            y += RowHeight;
+
+            if (_chooseAffixes) GUI.Label(new Rect(x, y, w, RowHeight), "Rarity follows from the affixes you choose.");
+            else DrawRarity(x, y, w);
             y += RowHeight;
         }
 
         IntSlider(x, ref y, w, "Item level", ref _itemLevel, 1, MaxItemLevel);
         IntSlider(x, ref y, w, "Quantity", ref _count, 1, MaxCount);
         y += 6f;
+    }
+
+    private static void DrawRarity(float x, float y, float w)
+    {
+        float width = (w - 6f * (Rarities.Length - 1)) / Rarities.Length;
+        for (int i = 0; i < Rarities.Length; i++)
+        {
+            var rarity = Rarities[i];
+            if (GUI.Button(new Rect(x + i * (width + 6f), y, width, RowHeight - 2f), Marked(rarity.ToString(), rarity == _rarity))) _rarity = rarity;
+        }
     }
 
     private static void DrawGenerate(float x, float y, float w)
@@ -163,7 +153,8 @@ internal static class Menu
     {
         try
         {
-            _status = ItemSpawner.Spawn(new SpawnRequest(_selected, _rarity, _itemLevel, _minLegendaryPotential, _count));
+            var affixes = ChoosingAffixes ? AffixPanel.Picks : null;
+            _status = ItemSpawner.Spawn(new SpawnRequest(_selected, _rarity, _itemLevel, _minLegendaryPotential, _count, affixes));
         }
         catch (Exception ex)
         {
@@ -179,14 +170,18 @@ internal static class Menu
         y += RowHeight;
     }
 
-    private static string Marked(string label, bool selected) => selected ? $"> {label} <" : label;
+    private static void Select(CatalogEntry entry)
+    {
+        _selected = entry;
+        if (entry == null || !entry.IsUniqueOrSet) AffixPanel.SetItem(entry);
+    }
 
     private static void SetMode(bool showUniques)
     {
         if (_showUniques == showUniques) return;
         _showUniques = showUniques;
-        _selected = null;
-        RefreshMatches();
+        Select(null);
+        Items.SetSource(showUniques ? Catalog.Uniques : Catalog.BaseItems);
     }
 
     private static void LoadCatalog()
@@ -197,7 +192,7 @@ internal static class Menu
             if (!_catalogLoaded) return;
 
             Melon<Mod>.Logger.Msg($"Catalog loaded: {Catalog.BaseItems.Count} base items, {Catalog.Uniques.Count} uniques and sets.");
-            RefreshMatches();
+            Items.SetSource(_showUniques ? Catalog.Uniques : Catalog.BaseItems);
         }
         catch (Exception ex)
         {
@@ -206,13 +201,6 @@ internal static class Menu
             _catalogErrorLogged = true;
             Melon<Mod>.Logger.Warning($"Catalog not ready: {ex.GetBaseException().Message}");
         }
-    }
-
-    private static void RefreshMatches()
-    {
-        var source = _showUniques ? Catalog.Uniques : Catalog.BaseItems;
-        _matches = source.Where(e => e.Label.Contains(_search.Trim(), StringComparison.OrdinalIgnoreCase)).ToList();
-        _page = 0;
     }
 
     private static bool IsGameTextInputActive()

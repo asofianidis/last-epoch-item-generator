@@ -10,9 +10,28 @@ internal sealed record CatalogEntry(string Label, int BaseType, int SubType, int
     internal bool IsUniqueOrSet => UniqueId >= 0;
 }
 
+internal sealed record AffixOption(string Label, int AffixId, bool IsPrefix, int MaxTierIndex);
+
+internal sealed class AffixPick
+{
+    internal AffixPick(AffixOption option)
+    {
+        Option = option;
+        Tier = option.MaxTierIndex;
+    }
+
+    internal AffixOption Option { get; }
+
+    /// <summary>Index into the affix's tiers, so 0 is T1.</summary>
+    internal int Tier { get; set; }
+}
+
 /// <summary>Everything the generator can create, read from the game's own item lists.</summary>
 internal static class Catalog
 {
+    // Affixes the game marks as incompatible with T6 stop at T5.
+    private const int HighestTierIndexWithoutT6 = 4;
+
     internal static IReadOnlyList<CatalogEntry> BaseItems { get; private set; } = Array.Empty<CatalogEntry>();
     internal static IReadOnlyList<CatalogEntry> Uniques { get; private set; } = Array.Empty<CatalogEntry>();
 
@@ -33,6 +52,31 @@ internal static class Catalog
         Uniques = uniqueItems;
         return true;
     }
+
+    /// <summary>The prefixes and suffixes the game says can roll on this item, for any class.</summary>
+    internal static List<AffixOption> AffixesFor(CatalogEntry item)
+    {
+        var compatible = AffixList.get().GetAllCompatibleAffixes(item.BaseType, item.SubType, AffixList.SpecialAffixType.Standard);
+
+        var options = new List<AffixOption>();
+        for (int i = 0; i < compatible.Count; i++)
+        {
+            var affix = compatible[i];
+            if (affix?.tiers == null || affix.tiers.Count == 0 || affix.type == AffixList.AffixType.SPECIAL) continue;
+
+            string name = FirstNonEmpty(affix.affixDisplayName, affix.affixName);
+            if (name.Length == 0) continue;
+
+            bool isPrefix = affix.type == AffixList.AffixType.PREFIX;
+            int maxTier = affix.tiers.Count - 1;
+            if (affix.t6Compatibility == AffixList.T6Compatibility.Incompatible) maxTier = Math.Min(maxTier, HighestTierIndexWithoutT6);
+
+            options.Add(new AffixOption($"{name} ({(isPrefix ? "Prefix" : "Suffix")})", affix.affixId, isPrefix, maxTier));
+        }
+        return options.OrderBy(o => o.Label, StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    internal static bool IsIdol(CatalogEntry item) => ItemList.IdolBaseTypes.Contains(item.BaseType);
 
     private static List<CatalogEntry> ReadBaseItems(ItemList items)
     {

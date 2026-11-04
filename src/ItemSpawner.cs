@@ -1,15 +1,20 @@
+using System.Collections.Generic;
+using System.Linq;
 using Il2Cpp;
 using MelonLoader;
 using Il2CppNullableAffixEffectiveness = Il2CppSystem.Nullable<Il2Cpp.ItemList.AffixEffectiveness>;
+using Il2CppNullableByte = Il2CppSystem.Nullable<byte>;
 using Il2CppNullableFaction = Il2CppSystem.Nullable<Il2CppLE.Factions.FactionID>;
 using Il2CppNullableInt = Il2CppSystem.Nullable<int>;
 using Il2CppNullableSpecialAffix = Il2CppSystem.Nullable<Il2Cpp.AffixList.SpecialAffixType>;
+using Il2CppStatList = Il2CppSystem.Collections.Generic.List<Il2Cpp.Stats.Stat>;
 
 namespace LastEpochItemGenerator;
 
 internal enum Rarity { Normal, Magic, Rare, Exalted }
 
-internal readonly record struct SpawnRequest(CatalogEntry Entry, Rarity Rarity, int ItemLevel, int MinLegendaryPotential, int Count);
+/// <summary><paramref name="Affixes"/> is null when the game should roll the affixes.</summary>
+internal readonly record struct SpawnRequest(CatalogEntry Entry, Rarity Rarity, int ItemLevel, int MinLegendaryPotential, int Count, IReadOnlyList<AffixPick> Affixes);
 
 /// <summary>Creates items with the game's own generator, then delivers them to the inventory or the ground.</summary>
 internal static class ItemSpawner
@@ -38,10 +43,21 @@ internal static class ItemSpawner
                 break;
             }
 
+            if (request.Affixes != null)
+            {
+                // Chosen affixes start from a plain item. Clearing a rolled one could leave its other state behind.
+                if (item.affixes.Count > 0)
+                {
+                    Melon<Mod>.Logger.Warning($"Expected no affixes on the base item, got: {Describe(item)}. The item was discarded.");
+                    return "The base item came with affixes, so nothing was created; see the log.";
+                }
+                ApplyAffixes(item, request.Affixes);
+            }
+
             if (!IsAsRequested(item, request))
             {
                 unexpected++;
-                Melon<Mod>.Logger.Warning($"Asked for {request.Entry.Label} as {request.Rarity}, got type {item.itemType}/{item.subType}, unique {item.uniqueID}, rarity {item.rarity}.");
+                Melon<Mod>.Logger.Warning($"Asked for {request.Entry.Label} as {request.Rarity}, got {Describe(item)}.");
             }
 
             // A full inventory returns false, so the item lands at the player's feet instead.
@@ -62,7 +78,7 @@ internal static class ItemSpawner
     private static ItemDataUnpacked Generate(GenerateItems generator, SpawnRequest request)
     {
         var entry = request.Entry;
-        bool exalted = !entry.IsUniqueOrSet && request.Rarity == Rarity.Exalted;
+        bool exalted = !entry.IsUniqueOrSet && request.Affixes == null && request.Rarity == Rarity.Exalted;
 
         // The Nullable parameters default to null in the signature, but the game's interop throws on null.
         // A new instance is the same as "no value".
@@ -85,9 +101,24 @@ internal static class ItemSpawner
             overrideLegendaryPotential: new Il2CppNullableInt());
     }
 
+    private static void ApplyAffixes(ItemDataUnpacked item, IReadOnlyList<AffixPick> picks)
+    {
+        foreach (var pick in picks)
+        {
+            var statChanges = new Il2CppStatList();
+            item.AddAffixNoCostOrChecks(pick.Option.AffixId, false, pick.Tier, ref statChanges, new Il2CppNullableByte());
+        }
+
+        // Adding affixes directly doesn't go through crafting, so the item's derived data is brought up to date here.
+        item.setRarityFromAffixesForNormalMagicOrRareItem();
+        item.RefreshIDAndValues();
+        item.MakeFullName();
+    }
+
     private static int RarityValue(SpawnRequest request)
     {
         if (request.Entry.IsUniqueOrSet) return request.Entry.IsSet ? RaritySet : RarityUnique;
+        if (request.Affixes != null) return RarityNormal;
         return request.Rarity switch
         {
             Rarity.Normal => RarityNormal,
@@ -104,6 +135,7 @@ internal static class ItemSpawner
         if (entry.SubType >= 0 && item.subType != entry.SubType) return false;
 
         if (entry.IsUniqueOrSet) return item.uniqueID == entry.UniqueId && (entry.IsSet ? item.isSet() : item.isUnique());
+        if (request.Affixes != null) return HasExactly(item, request.Affixes);
 
         return request.Rarity switch
         {
@@ -113,5 +145,26 @@ internal static class ItemSpawner
             Rarity.Exalted => item.isExaltedItem(),
             _ => false,
         };
+    }
+
+    private static bool HasExactly(ItemDataUnpacked item, IReadOnlyList<AffixPick> picks)
+    {
+        if (item.affixes.Count != picks.Count) return false;
+
+        var actual = new List<(int Id, int Tier)>();
+        for (int i = 0; i < item.affixes.Count; i++) actual.Add((item.affixes[i].affixId, item.affixes[i].affixTier));
+
+        return picks.All(p => actual.Contains((p.Option.AffixId, p.Tier)));
+    }
+
+    private static string Describe(ItemDataUnpacked item)
+    {
+        var affixes = new List<string>();
+        for (int i = 0; i < item.affixes.Count; i++)
+        {
+            var affix = item.affixes[i];
+            affixes.Add($"{affix.affixId} tier {affix.affixTier} (shown T{affix.DisplayTier})");
+        }
+        return $"type {item.itemType}/{item.subType}, unique {item.uniqueID}, rarity {item.rarity}, affixes [{string.Join(", ", affixes)}]";
     }
 }
