@@ -21,8 +21,8 @@ internal static class Menu
     private static Rarity _rarity = Rarity.Rare;
     private static CatalogEntry _selected;
 
-    private static bool ChoosingAffixes => _chooseAffixes && !_showUniques;
     private static bool MakingLegendary => _makeLegendary && _showUniques && _selected is { CanBeLegendary: true };
+    private static bool ChoosingAffixes => _chooseAffixes && (!_showUniques || MakingLegendary);
 
     internal static void Update()
     {
@@ -114,11 +114,16 @@ internal static class Menu
         if (_showUniques)
         {
             if (_selected is { CanBeLegendary: false }) GUI.Label(new Rect(x, y, w, RowHeight), "This item can't become legendary.");
-            else _makeLegendary = GUI.Toggle(new Rect(x, y, w, RowHeight - 2f), _makeLegendary, " Make legendary (random mods, from Legendary Potential)");
+            else _makeLegendary = GUI.Toggle(new Rect(x, y, w, RowHeight - 2f), _makeLegendary, " Make legendary");
             y += RowHeight;
 
-            // A unique needs Legendary Potential to gain any legendary mods.
-            IntSlider(x, ref y, w, "Min Legendary Potential", ref _minLegendaryPotential, MakingLegendary ? 1 : 0, MaxLegendaryPotential);
+            // The conversion rolls its own Legendary Potential, so the slider has no effect on a legendary.
+            if (MakingLegendary)
+            {
+                _chooseAffixes = GUI.Toggle(new Rect(x, y, w, RowHeight - 2f), _chooseAffixes, " Choose mods (random if none are chosen)");
+                y += RowHeight;
+            }
+            else IntSlider(x, ref y, w, "Min Legendary Potential", ref _minLegendaryPotential, 0, MaxLegendaryPotential);
         }
         else
         {
@@ -179,7 +184,7 @@ internal static class Menu
     private static void Select(CatalogEntry entry)
     {
         _selected = entry;
-        if (entry == null || !entry.IsUniqueOrSet) AffixPanel.SetItem(entry);
+        if (entry == null || !entry.IsUniqueOrSet || entry.CanBeLegendary) AffixPanel.SetItem(entry);
     }
 
     private static void SetMode(bool showUniques)

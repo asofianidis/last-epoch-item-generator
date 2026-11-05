@@ -21,6 +21,7 @@ internal static class ItemSpawner
 {
     // The value the game stores in ItemData.rarity. Normal, magic and rare count their affixes.
     private const int RarityNormal = 0, RarityMagic = 2, RarityRare = 4, RarityUnique = 7, RaritySet = 8;
+    private const byte RarityLegendary = 9;
 
     /// <summary>Returns the message to show in the menu.</summary>
     internal static string Spawn(SpawnRequest request)
@@ -59,7 +60,8 @@ internal static class ItemSpawner
                 break;
             }
 
-            if (request.Affixes != null)
+            if (request.MakeLegendary) MakeLegendary(item, player, request);
+            else if (request.Affixes != null)
             {
                 // Chosen affixes start from a plain item. Clearing a rolled one could leave its other state behind.
                 if (item.affixes.Count > 0)
@@ -69,8 +71,6 @@ internal static class ItemSpawner
                 }
                 ApplyAffixes(item, request.Affixes);
             }
-
-            if (request.MakeLegendary) MakeLegendary(item, player, request.ItemLevel);
 
             if (!IsAsRequested(item, request))
             {
@@ -138,13 +138,18 @@ internal static class ItemSpawner
             overrideLegendaryPotential: new Il2CppNullableInt());
     }
 
-    private static void ApplyAffixes(ItemDataUnpacked item, IReadOnlyList<AffixPick> picks)
+    private static void AddPicks(ItemDataUnpacked item, IReadOnlyList<AffixPick> picks)
     {
         foreach (var pick in picks)
         {
             var statChanges = new Il2CppStatList();
             item.AddAffixNoCostOrChecks(pick.Option.AffixId, false, pick.Tier, ref statChanges, new Il2CppNullableByte());
         }
+    }
+
+    private static void ApplyAffixes(ItemDataUnpacked item, IReadOnlyList<AffixPick> picks)
+    {
+        AddPicks(item, picks);
 
         // Adding affixes directly doesn't go through crafting, so the item's derived data is brought up to date here.
         item.setRarityFromAffixesForNormalMagicOrRareItem();
@@ -152,10 +157,22 @@ internal static class ItemSpawner
         item.MakeFullName();
     }
 
-    // The number of mods gained depends on the item's Legendary Potential, which the menu keeps at 1 or more.
-    private static void MakeLegendary(ItemDataUnpacked item, Actor player, int itemLevel)
+    // Chosen mods follow the end of the game's own conversion, which adds the mods and then sets the rarity.
+    // Its crafting version can't be used for this: it shuffles the mods and keeps a random selection of them.
+    private static void MakeLegendary(ItemDataUnpacked item, Actor player, SpawnRequest request)
     {
-        item.GainRandomModsToBecomeLegendary(player, itemLevel);
+        if (request.Affixes is { Count: > 0 } picks)
+        {
+            AddPicks(item, picks);
+            // A crafted legendary never has more mods than Legendary Potential.
+            if (item.legendaryPotential < picks.Count) item.legendaryPotential = (byte)picks.Count;
+            item.rarity = RarityLegendary;
+        }
+        else
+        {
+            item.GainRandomModsToBecomeLegendary(player, request.ItemLevel);
+        }
+
         item.RefreshIDAndValues();
         item.MakeFullName();
     }
@@ -179,7 +196,11 @@ internal static class ItemSpawner
         if (item.itemType != entry.BaseType) return false;
         if (entry.SubType >= 0 && item.subType != entry.SubType) return false;
 
-        if (request.MakeLegendary) return item.uniqueID == entry.UniqueId && item.isLegendary();
+        if (request.MakeLegendary)
+        {
+            bool modsMatch = request.Affixes is not { Count: > 0 } || HasExactly(item, request.Affixes);
+            return item.uniqueID == entry.UniqueId && item.isLegendary() && modsMatch;
+        }
         if (entry.IsUniqueOrSet) return item.uniqueID == entry.UniqueId && (entry.IsSet ? item.isSet() : item.isUnique());
         if (request.Affixes != null) return HasExactly(item, request.Affixes);
 

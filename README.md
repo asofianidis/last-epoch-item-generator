@@ -17,7 +17,8 @@ It refuses to generate anything if the game reports online play. Modifying the c
 | Rarity | Base items | Normal, Magic, Rare, Exalted |
 | Choose affixes | Base items | Opens the affix panel |
 | Make legendary | Uniques with Legendary Potential | On or off |
-| Min Legendary Potential | Uniques (ignored for sets) | 0 to 4, or 1 to 4 with Make legendary |
+| Choose mods | Legendaries | Opens the affix panel |
+| Min Legendary Potential | Uniques that aren't being made legendary (ignored for sets) | 0 to 4 |
 | Item level | All | 1 to 100 |
 | Quantity | All | 1 to 20 |
 
@@ -36,9 +37,12 @@ Tick **Choose affixes** and select a base item. The panel on the right lists the
 
 ### Making legendaries
 
-On **Uniques and sets**, tick **Make legendary** to get the item as a legendary straight away, with no crafting in game. The game's own conversion adds random mods, so you don't choose them.
+On **Uniques and sets**, tick **Make legendary** to get the item as a legendary straight away, with no crafting in game.
 
-Sets and Weaver's Will uniques can't use this. If a unique can't convert, the panel reports that the result differed from the request.
+- Tick **Choose mods** to pick them in the affix panel: up to 4, at most 2 prefixes and 2 suffixes, with a tier slider for each. You always get exactly the mods you pick.
+- With no mods chosen, the game's own conversion rolls random mods. It rolls how many itself, so Min Legendary Potential doesn't apply, and a unique may get no mods and stay a unique. The panel reports that the result differed from the request.
+
+Sets and Weaver's Will uniques can't use this.
 
 ## Checking that it works
 

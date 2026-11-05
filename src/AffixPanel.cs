@@ -1,20 +1,21 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
 namespace LastEpochItemGenerator;
 
-/// <summary>Second panel, beside the main one, for choosing the affixes on a base item.</summary>
+/// <summary>Second panel, beside the main one, for choosing the affixes on a base item or the mods on a legendary.</summary>
 internal static class AffixPanel
 {
     private const float Width = 520f, RowHeight = 26f, Padding = 14f;
-    private const int MaxSlotRows = 5;
+    private const int MaxSlotRows = 5, MaxLegendaryMods = 4;
 
     private static readonly SearchList<AffixOption> Options = new(a => a.Label);
     private static readonly List<AffixPick> PickList = new();
 
     private static CatalogEntry _item;
-    private static int _maxPrefixes, _maxSuffixes, _maxExperimental;
+    private static int _maxPrefixes, _maxSuffixes, _maxExperimental, _maxTotal;
     private static string _message = "";
 
     internal static IReadOnlyList<AffixPick> Picks => PickList;
@@ -30,6 +31,7 @@ internal static class AffixPanel
         Options.SetSource(options);
         _maxPrefixes = _maxSuffixes = hasItem && Catalog.IsIdol(item) ? 1 : 2;
         _maxExperimental = options.Any(o => o.Slot == AffixSlot.Experimental) ? 1 : 0;
+        _maxTotal = hasItem && item.IsUniqueOrSet ? MaxLegendaryMods : _maxPrefixes + _maxSuffixes + _maxExperimental;
     }
 
     internal static void Draw(Rect beside)
@@ -39,7 +41,7 @@ internal static class AffixPanel
 
         float x = panel.x + Padding, y = panel.y + 10f, w = Width - Padding * 2f;
 
-        GUI.Label(new Rect(x, y, w, RowHeight), _item == null ? "Select a base item to choose its affixes" : $"Affixes for {_item.Label}");
+        GUI.Label(new Rect(x, y, w, RowHeight), _item == null ? "Select an item to choose its affixes" : $"Affixes for {_item.Label}");
         y += RowHeight + 4f;
         if (_item == null) return;
 
@@ -54,7 +56,7 @@ internal static class AffixPanel
     // Always the same height, so the list below doesn't move as affixes are added.
     private static void DrawPicks(float x, ref float y, float w)
     {
-        int slots = _maxPrefixes + _maxSuffixes + _maxExperimental;
+        int slots = Math.Min(_maxPrefixes + _maxSuffixes + _maxExperimental, _maxTotal);
         for (int i = 0; i < slots; i++)
         {
             if (i < PickList.Count) DrawPick(PickList[i], x, y, w);
@@ -83,6 +85,12 @@ internal static class AffixPanel
         if (IsPicked(option))
         {
             PickList.RemoveAll(p => p.Option == option);
+            return;
+        }
+
+        if (PickList.Count >= _maxTotal)
+        {
+            _message = $"This item can have at most {_maxTotal} chosen mods.";
             return;
         }
 
