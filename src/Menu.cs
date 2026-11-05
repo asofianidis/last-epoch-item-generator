@@ -8,17 +8,19 @@ namespace LastEpochItemGenerator;
 /// <summary>Item generator panel, toggled with F4.</summary>
 internal static class Menu
 {
-    private const float Width = 520f, RowHeight = 26f, Padding = 14f, DesignHeight = 1080f;
+    private const float Width = 520f, RowHeight = 26f, Padding = 14f, DesignHeight = 1080f, CorruptionLabelWidth = 80f;
     private const int MaxItemLevel = 100, MaxCount = 20, MaxLegendaryPotential = 4;
 
-    private static readonly Rect Panel = new(40f, 120f, Width, 636f);
+    private static readonly Rect Panel = new(40f, 120f, Width, 662f);
     private static readonly Rarity[] Rarities = (Rarity[])Enum.GetValues(typeof(Rarity));
+    private static readonly CorruptionChoice[] CorruptionChoices = (CorruptionChoice[])Enum.GetValues(typeof(CorruptionChoice));
     private static readonly SearchList<CatalogEntry> Items = new(e => e.Label);
 
     private static bool _visible, _inputBlocked, _drawErrorLogged, _catalogLoaded, _catalogErrorLogged, _showUniques, _chooseAffixes, _makeLegendary;
     private static string _status = "";
     private static int _itemLevel = MaxItemLevel, _count = 1, _minLegendaryPotential;
     private static Rarity _rarity = Rarity.Rare;
+    private static CorruptionChoice _corruption = CorruptionChoice.Off;
     private static CatalogEntry _selected;
 
     private static bool MakingLegendary => _makeLegendary && _showUniques && _selected is { CanBeLegendary: true };
@@ -131,23 +133,28 @@ internal static class Menu
             y += RowHeight;
 
             if (_chooseAffixes) GUI.Label(new Rect(x, y, w, RowHeight), "Rarity follows from the affixes you choose.");
-            else DrawRarity(x, y, w);
+            else _rarity = DrawChoice(x, y, w, Rarities, _rarity);
             y += RowHeight;
         }
+
+        GUI.Label(new Rect(x, y, CorruptionLabelWidth, RowHeight), "Corruption");
+        _corruption = DrawChoice(x + CorruptionLabelWidth, y, w - CorruptionLabelWidth, CorruptionChoices, _corruption);
+        y += RowHeight;
 
         IntSlider(x, ref y, w, "Item level", ref _itemLevel, 1, MaxItemLevel);
         IntSlider(x, ref y, w, "Quantity", ref _count, 1, MaxCount);
         y += 6f;
     }
 
-    private static void DrawRarity(float x, float y, float w)
+    private static T DrawChoice<T>(float x, float y, float w, T[] choices, T current) where T : struct, Enum
     {
-        float width = (w - 6f * (Rarities.Length - 1)) / Rarities.Length;
-        for (int i = 0; i < Rarities.Length; i++)
+        float width = (w - 6f * (choices.Length - 1)) / choices.Length;
+        for (int i = 0; i < choices.Length; i++)
         {
-            var rarity = Rarities[i];
-            if (GUI.Button(new Rect(x + i * (width + 6f), y, width, RowHeight - 2f), Marked(rarity.ToString(), rarity == _rarity))) _rarity = rarity;
+            var choice = choices[i];
+            if (GUI.Button(new Rect(x + i * (width + 6f), y, width, RowHeight - 2f), Marked(choice.ToString(), choice.Equals(current)))) current = choice;
         }
+        return current;
     }
 
     private static void DrawGenerate(float x, float y, float w)
@@ -165,7 +172,7 @@ internal static class Menu
         try
         {
             var affixes = ChoosingAffixes ? AffixPanel.Picks : null;
-            _status = ItemSpawner.Spawn(new SpawnRequest(_selected, _rarity, _itemLevel, _minLegendaryPotential, MakingLegendary, _count, affixes));
+            _status = ItemSpawner.Spawn(new SpawnRequest(_selected, _rarity, _itemLevel, _minLegendaryPotential, MakingLegendary, _corruption, _count, affixes));
         }
         catch (Exception ex)
         {

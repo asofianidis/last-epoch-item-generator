@@ -13,8 +13,10 @@ namespace LastEpochItemGenerator;
 
 internal enum Rarity { Normal, Magic, Rare, Exalted }
 
+internal enum CorruptionChoice { Off, Random, Positive, Negative }
+
 /// <summary><paramref name="Affixes"/> is null when the game should roll the affixes.</summary>
-internal readonly record struct SpawnRequest(CatalogEntry Entry, Rarity Rarity, int ItemLevel, int MinLegendaryPotential, bool MakeLegendary, int Count, IReadOnlyList<AffixPick> Affixes);
+internal readonly record struct SpawnRequest(CatalogEntry Entry, Rarity Rarity, int ItemLevel, int MinLegendaryPotential, bool MakeLegendary, CorruptionChoice Corruption, int Count, IReadOnlyList<AffixPick> Affixes);
 
 /// <summary>Creates items with the game's own generator, then delivers them to the inventory or the ground.</summary>
 internal static class ItemSpawner
@@ -22,6 +24,9 @@ internal static class ItemSpawner
     // The value the game stores in ItemData.rarity. Normal, magic and rare count their affixes.
     private const int RarityNormal = 0, RarityMagic = 2, RarityRare = 4, RarityUnique = 7, RaritySet = 8;
     private const byte RarityLegendary = 9;
+
+    // The Rune of Corruption always passes this level, whatever the item's level.
+    private const int RuneCorruptionLevel = 100;
 
     /// <summary>Returns the message to show in the menu.</summary>
     internal static string Spawn(SpawnRequest request)
@@ -72,11 +77,17 @@ internal static class ItemSpawner
                 ApplyAffixes(item, request.Affixes);
             }
 
-            if (!IsAsRequested(item, request))
+            // Checked before corrupting, because a corruption outcome can change the rarity, subtype and affixes.
+            bool asRequested = IsAsRequested(item, request);
+            if (!asRequested) Melon<Mod>.Logger.Warning($"Asked for {request.Entry.Label} as {request.Rarity}, got {Describe(item)}.");
+
+            if (request.Corruption != CorruptionChoice.Off && !Corrupt(item, player, request.Corruption))
             {
-                unexpected++;
-                Melon<Mod>.Logger.Warning($"Asked for {request.Entry.Label} as {request.Rarity}, got {Describe(item)}.");
+                asRequested = false;
+                Melon<Mod>.Logger.Warning($"Couldn't corrupt {request.Entry.Label} with corruption {request.Corruption}: {Describe(item)}.");
             }
+
+            if (!asRequested) unexpected++;
 
             // A full inventory returns false, so the item lands at the player's feet instead.
             if (containers.attemptToPickupItem(item, player.position())) inventory++;
@@ -177,6 +188,34 @@ internal static class ItemSpawner
         item.MakeFullName();
     }
 
+    // The same steps as the Rune of Corruption in the game's crafting code, so the game picks the outcome.
+    // The rune always uses the rolled side. Here the choice can replace it.
+    private static bool Corrupt(ItemDataUnpacked item, Actor player, CorruptionChoice choice)
+    {
+        if (!item.CanBeCorrupted() || !item.TryGetCorruptionConfig(out var config, out bool rolledPositive)) return false;
+
+        bool isPositive = choice switch
+        {
+            CorruptionChoice.Positive => true,
+            CorruptionChoice.Negative => false,
+            _ => rolledPositive,
+        };
+
+        // The interop throws on a null filter. A new instance is empty, which permits every outcome.
+        var outcome = item.DetermineCorruptionOutcome(config, isPositive, new CorruptionOutcomeFilter());
+
+        // Null means nothing on this side fits the item. Applying it would only set the flag and log an error.
+        if (outcome == null) return false;
+
+        item.ApplyCorruptionOutcome(player, outcome, false, RuneCorruptionLevel, out _, out _, out _);
+
+        item.RefreshIDAndValues();
+        item.MakeFullName();
+
+        Melon<Mod>.Logger.Msg($"Corrupted with {(isPositive ? "positive" : "negative")} outcome {outcome.corruptionOutcome}: {Describe(item)}.");
+        return item.IsCorrupted();
+    }
+
     private static int RarityValue(SpawnRequest request)
     {
         if (request.Entry.IsUniqueOrSet) return request.Entry.IsSet ? RaritySet : RarityUnique;
@@ -232,6 +271,6 @@ internal static class ItemSpawner
             var affix = item.affixes[i];
             affixes.Add($"{affix.affixId} tier {affix.affixTier} (shown T{affix.DisplayTier}{(affix.IsExperimental ? ", experimental" : "")})");
         }
-        return $"type {item.itemType}/{item.subType}, unique {item.uniqueID}, rarity {item.rarity}, LP {item.legendaryPotential}, affixes [{string.Join(", ", affixes)}]";
+        return $"type {item.itemType}/{item.subType}, unique {item.uniqueID}, rarity {item.rarity}, corrupted {item.IsCorrupted()}, LP {item.legendaryPotential}, affixes [{string.Join(", ", affixes)}]";
     }
 }

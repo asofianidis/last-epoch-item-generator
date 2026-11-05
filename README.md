@@ -19,6 +19,7 @@ It refuses to generate anything if the game reports online play. Modifying the c
 | Make legendary | Uniques with Legendary Potential | On or off |
 | Choose mods | Legendaries | Opens the affix panel |
 | Min Legendary Potential | Uniques that aren't being made legendary (ignored for sets) | 0 to 4 |
+| Corruption | All | Off, Random, Positive, Negative |
 | Item level | All | 1 to 100 |
 | Quantity | All | 1 to 20 |
 
@@ -43,6 +44,15 @@ On **Uniques and sets**, tick **Make legendary** to get the item as a legendary 
 - With no mods chosen, the game's own conversion rolls random mods. It rolls how many itself, so Min Legendary Potential doesn't apply, and a unique may get no mods and stay a unique. The panel reports that the result differed from the request.
 
 Sets and Weaver's Will uniques can't use this.
+
+### Corrupting items
+
+Set **Corruption** to corrupt each item the way a Rune of Corruption does, as the last step after any chosen affixes or legendary conversion.
+
+- **Random** lets the game roll the side, as the rune does. **Positive** and **Negative** choose the side, and the game still picks the outcome from that side's list.
+- Positive and negative are the game's own lists. An outcome can add or remove affixes, change the subtype or rarity, or ruin the item, so the result may no longer match what you chose. The log records each outcome.
+- An item the game can't corrupt, or with nothing on the chosen side that fits it, is created uncorrupted, and the panel reports that it differed from the request.
+- The rune treats every item as level 100 when applying the outcome, so the Item level option doesn't affect it.
 
 ## Checking that it works
 
