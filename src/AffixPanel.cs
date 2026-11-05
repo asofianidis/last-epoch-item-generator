@@ -8,12 +8,13 @@ namespace LastEpochItemGenerator;
 internal static class AffixPanel
 {
     private const float Width = 520f, RowHeight = 26f, Padding = 14f;
+    private const int MaxSlotRows = 5;
 
     private static readonly SearchList<AffixOption> Options = new(a => a.Label);
     private static readonly List<AffixPick> PickList = new();
 
     private static CatalogEntry _item;
-    private static int _maxPrefixes, _maxSuffixes;
+    private static int _maxPrefixes, _maxSuffixes, _maxExperimental;
     private static string _message = "";
 
     internal static IReadOnlyList<AffixPick> Picks => PickList;
@@ -25,8 +26,10 @@ internal static class AffixPanel
         _message = "";
 
         bool hasItem = item != null;
-        Options.SetSource(hasItem ? Catalog.AffixesFor(item) : new List<AffixOption>());
+        var options = hasItem ? Catalog.AffixesFor(item) : new List<AffixOption>();
+        Options.SetSource(options);
         _maxPrefixes = _maxSuffixes = hasItem && Catalog.IsIdol(item) ? 1 : 2;
+        _maxExperimental = options.Any(o => o.Slot == AffixSlot.Experimental) ? 1 : 0;
     }
 
     internal static void Draw(Rect beside)
@@ -51,13 +54,14 @@ internal static class AffixPanel
     // Always the same height, so the list below doesn't move as affixes are added.
     private static void DrawPicks(float x, ref float y, float w)
     {
-        for (int i = 0; i < _maxPrefixes + _maxSuffixes; i++)
+        int slots = _maxPrefixes + _maxSuffixes + _maxExperimental;
+        for (int i = 0; i < slots; i++)
         {
             if (i < PickList.Count) DrawPick(PickList[i], x, y, w);
             else GUI.Label(new Rect(x, y, w, RowHeight), "(empty slot)");
             y += RowHeight;
         }
-        y += RowHeight * (4 - (_maxPrefixes + _maxSuffixes)) + 6f;
+        y += RowHeight * (MaxSlotRows - slots) + 6f;
     }
 
     private static void DrawPick(AffixPick pick, float x, float y, float w)
@@ -82,13 +86,20 @@ internal static class AffixPanel
             return;
         }
 
-        int limit = option.IsPrefix ? _maxPrefixes : _maxSuffixes;
-        if (PickList.Count(p => p.Option.IsPrefix == option.IsPrefix) >= limit)
+        int limit = LimitFor(option.Slot);
+        if (PickList.Count(p => p.Option.Slot == option.Slot) >= limit)
         {
-            _message = $"This item can have at most {limit} {(option.IsPrefix ? "prefix" : "suffix")} affix{(limit == 1 ? "" : "es")}.";
+            _message = $"This item can have at most {limit} {option.Slot.ToString().ToLowerInvariant()} affix{(limit == 1 ? "" : "es")}.";
             return;
         }
 
         PickList.Add(new AffixPick(option));
     }
+
+    private static int LimitFor(AffixSlot slot) => slot switch
+    {
+        AffixSlot.Prefix => _maxPrefixes,
+        AffixSlot.Suffix => _maxSuffixes,
+        _ => _maxExperimental,
+    };
 }

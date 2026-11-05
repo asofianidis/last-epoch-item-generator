@@ -5,12 +5,14 @@ using Il2Cpp;
 
 namespace LastEpochItemGenerator;
 
-internal sealed record CatalogEntry(string Label, int BaseType, int SubType, int UniqueId, bool IsSet)
+internal sealed record CatalogEntry(string Label, int BaseType, int SubType, int UniqueId, bool IsSet, bool CanBeLegendary)
 {
     internal bool IsUniqueOrSet => UniqueId >= 0;
 }
 
-internal sealed record AffixOption(string Label, int AffixId, bool IsPrefix, int MaxTierIndex);
+internal enum AffixSlot { Prefix, Suffix, Experimental }
+
+internal sealed record AffixOption(string Label, int AffixId, AffixSlot Slot, int MaxTierIndex);
 
 internal sealed class AffixPick
 {
@@ -53,30 +55,40 @@ internal static class Catalog
         return true;
     }
 
-    /// <summary>The prefixes and suffixes the game says can roll on this item, for any class.</summary>
+    /// <summary>The prefixes, suffixes and experimental affixes the game says can roll on this item, for any class.</summary>
     internal static List<AffixOption> AffixesFor(CatalogEntry item)
     {
-        var compatible = AffixList.get().GetAllCompatibleAffixes(item.BaseType, item.SubType, AffixList.SpecialAffixType.Standard);
-
-        var options = new List<AffixOption>();
-        for (int i = 0; i < compatible.Count; i++)
-        {
-            var affix = compatible[i];
-            if (affix?.tiers == null || affix.tiers.Count == 0 || affix.type == AffixList.AffixType.SPECIAL) continue;
-
-            string name = FirstNonEmpty(affix.affixDisplayName, affix.affixName);
-            if (name.Length == 0) continue;
-
-            bool isPrefix = affix.type == AffixList.AffixType.PREFIX;
-            int maxTier = affix.tiers.Count - 1;
-            if (affix.t6Compatibility == AffixList.T6Compatibility.Incompatible) maxTier = Math.Min(maxTier, HighestTierIndexWithoutT6);
-
-            options.Add(new AffixOption($"{name} ({(isPrefix ? "Prefix" : "Suffix")})", affix.affixId, isPrefix, maxTier));
-        }
+        var options = ReadAffixes(item, AffixList.SpecialAffixType.Standard);
+        options.AddRange(ReadAffixes(item, AffixList.SpecialAffixType.Experimental));
         return options.OrderBy(o => o.Label, StringComparer.OrdinalIgnoreCase).ToList();
     }
 
     internal static bool IsIdol(CatalogEntry item) => ItemList.IdolBaseTypes.Contains(item.BaseType);
+
+    private static List<AffixOption> ReadAffixes(CatalogEntry item, AffixList.SpecialAffixType type)
+    {
+        var options = new List<AffixOption>();
+        var compatible = AffixList.get().GetAllCompatibleAffixes(item.BaseType, item.SubType, type);
+        if (compatible == null) return options;
+
+        bool experimental = type == AffixList.SpecialAffixType.Experimental;
+        for (int i = 0; i < compatible.Count; i++)
+        {
+            var affix = compatible[i];
+            if (affix?.tiers == null || affix.tiers.Count == 0) continue;
+            if (!experimental && affix.type == AffixList.AffixType.SPECIAL) continue;
+
+            string name = FirstNonEmpty(affix.affixDisplayName, affix.affixName);
+            if (name.Length == 0) continue;
+
+            var slot = experimental ? AffixSlot.Experimental : affix.type == AffixList.AffixType.PREFIX ? AffixSlot.Prefix : AffixSlot.Suffix;
+            int maxTier = affix.tiers.Count - 1;
+            if (affix.t6Compatibility == AffixList.T6Compatibility.Incompatible) maxTier = Math.Min(maxTier, HighestTierIndexWithoutT6);
+
+            options.Add(new AffixOption($"{name} ({slot})", affix.affixId, slot, maxTier));
+        }
+        return options;
+    }
 
     private static List<CatalogEntry> ReadBaseItems(ItemList items)
     {
@@ -93,7 +105,7 @@ internal static class Catalog
                 if (sub == null || sub.cannotDrop || sub.isLegacySubType) continue;
 
                 string name = FirstNonEmpty(sub.displayName, sub.name);
-                if (name.Length > 0) entries.Add(new CatalogEntry($"{baseName}: {name}", baseItem.baseTypeID, sub.subTypeID, -1, false));
+                if (name.Length > 0) entries.Add(new CatalogEntry($"{baseName}: {name}", baseItem.baseTypeID, sub.subTypeID, -1, false, false));
             }
         }
         return entries.OrderBy(e => e.Label, StringComparer.OrdinalIgnoreCase).ToList();
@@ -112,8 +124,10 @@ internal static class Catalog
 
             int subType = unique.subTypes != null && unique.subTypes.Count > 0 ? unique.subTypes[0] : -1;
             string kind = unique.isSetItem ? "Set" : "Unique";
+            // Sets have no Legendary Potential, and Weaver's Will uniques use their own property instead.
+            bool canBeLegendary = !unique.isSetItem && unique.legendaryType == UniqueList.LegendaryType.LegendaryPotential;
             entries.Add(new CatalogEntry($"{name} ({items.GetBaseTypeDisplayName(unique.baseType)}, {kind})",
-                unique.baseType, subType, unique.uniqueID, unique.isSetItem));
+                unique.baseType, subType, unique.uniqueID, unique.isSetItem, canBeLegendary));
         }
         return entries.OrderBy(e => e.Label, StringComparer.OrdinalIgnoreCase).ToList();
     }

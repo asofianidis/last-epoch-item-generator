@@ -14,7 +14,7 @@ namespace LastEpochItemGenerator;
 internal enum Rarity { Normal, Magic, Rare, Exalted }
 
 /// <summary><paramref name="Affixes"/> is null when the game should roll the affixes.</summary>
-internal readonly record struct SpawnRequest(CatalogEntry Entry, Rarity Rarity, int ItemLevel, int MinLegendaryPotential, int Count, IReadOnlyList<AffixPick> Affixes);
+internal readonly record struct SpawnRequest(CatalogEntry Entry, Rarity Rarity, int ItemLevel, int MinLegendaryPotential, bool MakeLegendary, int Count, IReadOnlyList<AffixPick> Affixes);
 
 /// <summary>Creates items with the game's own generator, then delivers them to the inventory or the ground.</summary>
 internal static class ItemSpawner
@@ -69,6 +69,8 @@ internal static class ItemSpawner
                 }
                 ApplyAffixes(item, request.Affixes);
             }
+
+            if (request.MakeLegendary) MakeLegendary(item, player, request.ItemLevel);
 
             if (!IsAsRequested(item, request))
             {
@@ -150,6 +152,14 @@ internal static class ItemSpawner
         item.MakeFullName();
     }
 
+    // The number of mods gained depends on the item's Legendary Potential, which the menu keeps at 1 or more.
+    private static void MakeLegendary(ItemDataUnpacked item, Actor player, int itemLevel)
+    {
+        item.GainRandomModsToBecomeLegendary(player, itemLevel);
+        item.RefreshIDAndValues();
+        item.MakeFullName();
+    }
+
     private static int RarityValue(SpawnRequest request)
     {
         if (request.Entry.IsUniqueOrSet) return request.Entry.IsSet ? RaritySet : RarityUnique;
@@ -169,6 +179,7 @@ internal static class ItemSpawner
         if (item.itemType != entry.BaseType) return false;
         if (entry.SubType >= 0 && item.subType != entry.SubType) return false;
 
+        if (request.MakeLegendary) return item.uniqueID == entry.UniqueId && item.isLegendary();
         if (entry.IsUniqueOrSet) return item.uniqueID == entry.UniqueId && (entry.IsSet ? item.isSet() : item.isUnique());
         if (request.Affixes != null) return HasExactly(item, request.Affixes);
 
@@ -186,10 +197,10 @@ internal static class ItemSpawner
     {
         if (item.affixes.Count != picks.Count) return false;
 
-        var actual = new List<(int Id, int Tier)>();
-        for (int i = 0; i < item.affixes.Count; i++) actual.Add((item.affixes[i].affixId, item.affixes[i].affixTier));
+        var actual = new List<(int Id, int Tier, bool Experimental)>();
+        for (int i = 0; i < item.affixes.Count; i++) actual.Add((item.affixes[i].affixId, item.affixes[i].affixTier, item.affixes[i].IsExperimental));
 
-        return picks.All(p => actual.Contains((p.Option.AffixId, p.Tier)));
+        return picks.All(p => actual.Contains((p.Option.AffixId, p.Tier, p.Option.Slot == AffixSlot.Experimental)));
     }
 
     private static string Describe(ItemDataUnpacked item)
@@ -198,8 +209,8 @@ internal static class ItemSpawner
         for (int i = 0; i < item.affixes.Count; i++)
         {
             var affix = item.affixes[i];
-            affixes.Add($"{affix.affixId} tier {affix.affixTier} (shown T{affix.DisplayTier})");
+            affixes.Add($"{affix.affixId} tier {affix.affixTier} (shown T{affix.DisplayTier}{(affix.IsExperimental ? ", experimental" : "")})");
         }
-        return $"type {item.itemType}/{item.subType}, unique {item.uniqueID}, rarity {item.rarity}, affixes [{string.Join(", ", affixes)}]";
+        return $"type {item.itemType}/{item.subType}, unique {item.uniqueID}, rarity {item.rarity}, LP {item.legendaryPotential}, affixes [{string.Join(", ", affixes)}]";
     }
 }

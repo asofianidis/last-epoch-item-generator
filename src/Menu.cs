@@ -15,13 +15,14 @@ internal static class Menu
     private static readonly Rarity[] Rarities = (Rarity[])Enum.GetValues(typeof(Rarity));
     private static readonly SearchList<CatalogEntry> Items = new(e => e.Label);
 
-    private static bool _visible, _inputBlocked, _drawErrorLogged, _catalogLoaded, _catalogErrorLogged, _showUniques, _chooseAffixes;
+    private static bool _visible, _inputBlocked, _drawErrorLogged, _catalogLoaded, _catalogErrorLogged, _showUniques, _chooseAffixes, _makeLegendary;
     private static string _status = "";
     private static int _itemLevel = MaxItemLevel, _count = 1, _minLegendaryPotential;
     private static Rarity _rarity = Rarity.Rare;
     private static CatalogEntry _selected;
 
     private static bool ChoosingAffixes => _chooseAffixes && !_showUniques;
+    private static bool MakingLegendary => _makeLegendary && _showUniques && _selected is { CanBeLegendary: true };
 
     internal static void Update()
     {
@@ -112,7 +113,12 @@ internal static class Menu
     {
         if (_showUniques)
         {
-            IntSlider(x, ref y, w, "Min Legendary Potential", ref _minLegendaryPotential, 0, MaxLegendaryPotential);
+            if (_selected is { CanBeLegendary: false }) GUI.Label(new Rect(x, y, w, RowHeight), "This item can't become legendary.");
+            else _makeLegendary = GUI.Toggle(new Rect(x, y, w, RowHeight - 2f), _makeLegendary, " Make legendary (random mods, from Legendary Potential)");
+            y += RowHeight;
+
+            // A unique needs Legendary Potential to gain any legendary mods.
+            IntSlider(x, ref y, w, "Min Legendary Potential", ref _minLegendaryPotential, MakingLegendary ? 1 : 0, MaxLegendaryPotential);
         }
         else
         {
@@ -154,7 +160,7 @@ internal static class Menu
         try
         {
             var affixes = ChoosingAffixes ? AffixPanel.Picks : null;
-            _status = ItemSpawner.Spawn(new SpawnRequest(_selected, _rarity, _itemLevel, _minLegendaryPotential, _count, affixes));
+            _status = ItemSpawner.Spawn(new SpawnRequest(_selected, _rarity, _itemLevel, _minLegendaryPotential, MakingLegendary, _count, affixes));
         }
         catch (Exception ex)
         {

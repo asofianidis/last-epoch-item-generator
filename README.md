@@ -16,7 +16,8 @@ It refuses to generate anything if the game reports online play. Modifying the c
 | --- | --- | --- |
 | Rarity | Base items | Normal, Magic, Rare, Exalted |
 | Choose affixes | Base items | Opens the affix panel |
-| Min Legendary Potential | Uniques (ignored for sets) | 0 to 4 |
+| Make legendary | Uniques with Legendary Potential | On or off |
+| Min Legendary Potential | Uniques (ignored for sets) | 0 to 4, or 1 to 4 with Make legendary |
 | Item level | All | 1 to 100 |
 | Quantity | All | 1 to 20 |
 
@@ -24,13 +25,20 @@ Items go to your inventory; once it's full, they drop at your feet.
 
 ### Choosing affixes
 
-Tick **Choose affixes** and select a base item. The panel on the right lists the prefixes and suffixes the game allows on that item. Click one to add it, click it again to remove it, and set its tier with the slider.
+Tick **Choose affixes** and select a base item. The panel on the right lists the prefixes, suffixes and experimental affixes the game allows on that item. Click one to add it, click it again to remove it, and set its tier with the slider.
 
 - Gear can have up to 2 prefixes and 2 suffixes. Idols are limited to 1 of each.
+- Items that allow experimental affixes can also have 1. Search for `Experimental` to find them.
 - Tiers go as high as the game defines for each affix. Affixes the game marks as incompatible with T6 stop at T5.
 - The value within each tier is still rolled by the game.
 - Rarity follows from the affixes, and sealed affixes aren't supported.
 - Without **Choose affixes**, the game rolls the affixes as normal. Uniques and sets don't use this panel.
+
+### Making legendaries
+
+On **Uniques and sets**, tick **Make legendary** to get the item as a legendary straight away, with no crafting in game. The game's own conversion adds random mods, so you don't choose them.
+
+Sets and Weaver's Will uniques can't use this. If a unique can't convert, the panel reports that the result differed from the request.
 
 ## Checking that it works
 
