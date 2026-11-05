@@ -25,13 +25,29 @@ internal static class ItemSpawner
     /// <summary>Returns the message to show in the menu.</summary>
     internal static string Spawn(SpawnRequest request)
     {
-        if (!Mod.Offline) return "Offline play only.";
+        Melon<Mod>.Logger.Msg($"Generate pressed: {request.Entry.Label} x{request.Count}, {request.Affixes?.Count.ToString() ?? "rolled"} affixes.");
 
-        var player = PlayerFinder.getPlayerActor();
-        var generator = GenerateItems.instance;
-        var containers = ItemContainersManager.Instance;
-        var ground = GroundItemManager.instance;
-        if (player == null || generator == null || containers == null || ground == null) return "Enter the world with a character first.";
+        if (!Mod.Offline)
+        {
+            Melon<Mod>.Logger.Warning("Generation refused: the game reports online play.");
+            return "Offline play only.";
+        }
+
+        var player = FindPlayer();
+        var generator = Resolve(GenerateItems.instance);
+        var containers = Resolve(ItemContainersManager.Instance);
+        var ground = Resolve(GroundItemManager.instance);
+
+        var missing = new List<string>();
+        if (player == null) missing.Add("player");
+        if (generator == null) missing.Add("item generator");
+        if (containers == null) missing.Add("inventory");
+        if (missing.Count > 0)
+        {
+            string names = string.Join(", ", missing);
+            Melon<Mod>.Logger.Warning($"Generation stopped, not found: {names}. Ground manager found: {ground != null}.");
+            return $"Not found: {names}. Enter the world with a character first.";
+        }
 
         int inventory = 0, onGround = 0, unexpected = 0;
         for (int i = 0; i < request.Count; i++)
@@ -64,6 +80,12 @@ internal static class ItemSpawner
             if (containers.attemptToPickupItem(item, player.position())) inventory++;
             else
             {
+                if (ground == null)
+                {
+                    Melon<Mod>.Logger.Warning($"Inventory refused {request.Entry.Label} and the ground manager wasn't found. Created {inventory}.");
+                    return $"Created {inventory}, then the inventory was full. Make room and try again.";
+                }
+
                 ground.dropItemForPlayer(player, item, player.position(), false);
                 onGround++;
             }
@@ -74,6 +96,19 @@ internal static class ItemSpawner
         string message = $"Created {inventory + onGround}: {inventory} in inventory, {onGround} on the ground.";
         return unexpected > 0 ? $"{message} {unexpected} differed from the request; see the log." : message;
     }
+
+    private static Actor FindPlayer()
+    {
+        var player = PlayerFinder.getPlayerActor();
+        if (player != null) return player;
+
+        var actors = PlayerFinder.FindPlayerActors();
+        return actors != null && actors.Length > 0 ? actors[0] : null;
+    }
+
+    // The game's static instance fields can be empty, so the scene is the fallback.
+    private static T Resolve<T>(T fromStatic) where T : UnityEngine.Object =>
+        fromStatic != null ? fromStatic : UnityEngine.Object.FindAnyObjectByType<T>(UnityEngine.FindObjectsInactive.Include);
 
     private static ItemDataUnpacked Generate(GenerateItems generator, SpawnRequest request)
     {

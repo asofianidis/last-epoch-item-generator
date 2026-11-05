@@ -28,7 +28,7 @@ internal static class Menu
         if (Input.GetKeyDown(KeyCode.F4) && !IsGameTextInputActive())
         {
             _visible = !_visible;
-            if (_visible) LoadCatalog();
+            if (_visible && !_catalogLoaded) LoadCatalog();
         }
 
         // Typing in a search box must not trigger the game's hotkeys, so input stays off while the panel is open.
