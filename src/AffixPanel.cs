@@ -9,16 +9,17 @@ namespace LastEpochItemGenerator;
 internal static class AffixPanel
 {
     private const float Width = 520f, RowHeight = 26f, Padding = 14f;
-    private const int MaxSlotRows = 5, MaxLegendaryMods = 4;
+    private const int MaxSlotRows = 6, MaxLegendaryMods = 4;
 
     private static readonly SearchList<AffixOption> Options = new(a => a.Label);
     private static readonly List<AffixPick> PickList = new();
 
     private static CatalogEntry _item;
-    private static int _maxPrefixes, _maxSuffixes, _maxExperimental, _maxTotal;
+    private static int _maxPrefixes, _maxSuffixes, _maxExperimental, _maxCorrupted, _maxSpecial, _maxMods;
     private static string _message = "";
 
     internal static IReadOnlyList<AffixPick> Picks => PickList;
+    internal static bool HasCorruptedPick => PickList.Any(p => p.Option.Slot == AffixSlot.Corrupted);
 
     internal static void SetItem(CatalogEntry item)
     {
@@ -31,7 +32,9 @@ internal static class AffixPanel
         Options.SetSource(options);
         _maxPrefixes = _maxSuffixes = hasItem && Catalog.IsIdol(item) ? 1 : 2;
         _maxExperimental = options.Any(o => o.Slot == AffixSlot.Experimental) ? 1 : 0;
-        _maxTotal = hasItem && item.IsUniqueOrSet ? MaxLegendaryMods : _maxPrefixes + _maxSuffixes + _maxExperimental;
+        _maxCorrupted = options.Any(o => o.Slot == AffixSlot.Corrupted) ? 1 : 0;
+        _maxSpecial = options.Any(o => o.Slot == AffixSlot.Special) ? 1 : 0;
+        _maxMods = hasItem && item.IsUniqueOrSet ? MaxLegendaryMods : _maxPrefixes + _maxSuffixes + _maxExperimental;
     }
 
     internal static void Draw(Rect beside)
@@ -56,7 +59,7 @@ internal static class AffixPanel
     // Always the same height, so the list below doesn't move as affixes are added.
     private static void DrawPicks(float x, ref float y, float w)
     {
-        int slots = Math.Min(_maxPrefixes + _maxSuffixes + _maxExperimental, _maxTotal);
+        int slots = Math.Min(_maxPrefixes + _maxSuffixes + _maxExperimental, _maxMods) + _maxCorrupted + _maxSpecial;
         for (int i = 0; i < slots; i++)
         {
             if (i < PickList.Count) DrawPick(PickList[i], x, y, w);
@@ -88,9 +91,9 @@ internal static class AffixPanel
             return;
         }
 
-        if (PickList.Count >= _maxTotal)
+        if (option.IsMod && PickList.Count(p => p.Option.IsMod) >= _maxMods)
         {
-            _message = $"This item can have at most {_maxTotal} chosen mods.";
+            _message = $"This item can have at most {_maxMods} chosen mods.";
             return;
         }
 
@@ -108,6 +111,8 @@ internal static class AffixPanel
     {
         AffixSlot.Prefix => _maxPrefixes,
         AffixSlot.Suffix => _maxSuffixes,
-        _ => _maxExperimental,
+        AffixSlot.Experimental => _maxExperimental,
+        AffixSlot.Corrupted => _maxCorrupted,
+        _ => _maxSpecial,
     };
 }

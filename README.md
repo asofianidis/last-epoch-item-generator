@@ -19,7 +19,7 @@ It refuses to generate anything if the game reports online play. Modifying the c
 | Make legendary | Uniques with Legendary Potential | On or off |
 | Choose mods | Legendaries | Opens the affix panel |
 | Min Legendary Potential | Uniques that aren't being made legendary (ignored for sets) | 0 to 4 |
-| Corruption | All | Off, Random, Positive, Negative |
+| Corruption | All, unless a corrupted affix is chosen | Off, Random, Positive, Negative |
 | Item level | All | 1 to 100 |
 | Quantity | All | 1 to 20 |
 
@@ -40,7 +40,10 @@ Tick **Choose affixes** and select a base item. The panel on the right lists the
 
 On **Uniques and sets**, tick **Make legendary** to get the item as a legendary straight away, with no crafting in game.
 
-- Tick **Choose mods** to pick them in the affix panel: up to 4, at most 2 prefixes and 2 suffixes, with a tier slider for each. You always get exactly the mods you pick.
+- Tick **Choose mods** to pick them in the affix panel: up to 4, at most 2 prefixes and 2 suffixes, with a tier slider for each. You always get the mods you pick. A unique that comes with an affix of its own keeps it as well.
+- On top of those 4, you can add 1 corrupted affix and 1 special affix. Search for `Corrupted` or `Special` to find them. The panel lists only what the game allows on that item, so some items have none.
+- Special affixes are the game's personal, set, idol enchantment and idol weaver affixes.
+- A corrupted affix makes the item corrupted, so the **Corruption** option is replaced by a note while one is chosen and no corruption outcome is rolled.
 - With no mods chosen, the game's own conversion rolls random mods. It rolls how many itself, so Min Legendary Potential doesn't apply, and a unique may get no mods and stay a unique. The panel reports that the result differed from the request.
 
 Sets and Weaver's Will uniques can't use this.

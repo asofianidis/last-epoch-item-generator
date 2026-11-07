@@ -81,7 +81,8 @@ internal static class ItemSpawner
             bool asRequested = IsAsRequested(item, request);
             if (!asRequested) Melon<Mod>.Logger.Warning($"Asked for {request.Entry.Label} as {request.Rarity}, got {Describe(item)}.");
 
-            if (request.Corruption != CorruptionChoice.Off && !Corrupt(item, player, request.Corruption))
+            // A chosen corrupted affix already made the item corrupted, and the game can't corrupt it twice.
+            if (request.Corruption != CorruptionChoice.Off && !HasCorruptedPick(request.Affixes) && !Corrupt(item, player, request.Corruption))
             {
                 asRequested = false;
                 Melon<Mod>.Logger.Warning($"Couldn't corrupt {request.Entry.Label} with corruption {request.Corruption}: {Describe(item)}.");
@@ -149,9 +150,13 @@ internal static class ItemSpawner
             overrideLegendaryPotential: new Il2CppNullableInt());
     }
 
+    private static bool HasCorruptedPick(IReadOnlyList<AffixPick> picks) =>
+        picks != null && picks.Any(p => p.Option.Slot == AffixSlot.Corrupted);
+
     private static void AddPicks(ItemDataUnpacked item, IReadOnlyList<AffixPick> picks)
     {
-        foreach (var pick in picks)
+        // A legendary keeps its corrupted affix last, because that's where the game puts it when corrupting one.
+        foreach (var pick in picks.OrderBy(p => p.Option.Slot == AffixSlot.Corrupted))
         {
             var statChanges = new Il2CppStatList();
             item.AddAffixNoCostOrChecks(pick.Option.AffixId, false, pick.Tier, ref statChanges, new Il2CppNullableByte());
@@ -168,16 +173,22 @@ internal static class ItemSpawner
         item.MakeFullName();
     }
 
-    // Chosen mods follow the end of the game's own conversion, which adds the mods and then sets the rarity.
+    // Chosen mods follow the end of the game's own conversion, which adds the mods and sets the rarity.
     // Its crafting version can't be used for this: it shuffles the mods and keeps a random selection of them.
     private static void MakeLegendary(ItemDataUnpacked item, Actor player, SpawnRequest request)
     {
         if (request.Affixes is { Count: > 0 } picks)
         {
-            AddPicks(item, picks);
-            // A crafted legendary never has more mods than Legendary Potential.
-            if (item.legendaryPotential < picks.Count) item.legendaryPotential = (byte)picks.Count;
+            // Set before adding, because the game places a corrupted affix according to the item's rarity.
             item.rarity = RarityLegendary;
+            AddPicks(item, picks);
+
+            // A crafted legendary never has more mods than Legendary Potential.
+            int mods = picks.Count(p => p.Option.IsMod);
+            if (item.legendaryPotential < mods) item.legendaryPotential = (byte)mods;
+
+            // The game only sets this when applying a corruption outcome, so adding the affix directly doesn't.
+            if (HasCorruptedPick(picks)) item.SetAsCorrupted();
         }
         else
         {
@@ -237,7 +248,8 @@ internal static class ItemSpawner
 
         if (request.MakeLegendary)
         {
-            bool modsMatch = request.Affixes is not { Count: > 0 } || HasExactly(item, request.Affixes);
+            // Some uniques come with an affix of their own, so a legendary can have more than the picks.
+            bool modsMatch = request.Affixes is not { Count: > 0 } || HasAll(item, request.Affixes);
             return item.uniqueID == entry.UniqueId && item.isLegendary() && modsMatch;
         }
         if (entry.IsUniqueOrSet) return item.uniqueID == entry.UniqueId && (entry.IsSet ? item.isSet() : item.isUnique());
@@ -253,14 +265,19 @@ internal static class ItemSpawner
         };
     }
 
-    private static bool HasExactly(ItemDataUnpacked item, IReadOnlyList<AffixPick> picks)
+    private static bool HasExactly(ItemDataUnpacked item, IReadOnlyList<AffixPick> picks) =>
+        item.affixes.Count == picks.Count && HasAll(item, picks);
+
+    private static bool HasAll(ItemDataUnpacked item, IReadOnlyList<AffixPick> picks)
     {
-        if (item.affixes.Count != picks.Count) return false;
+        var actual = new List<(int Id, int Tier, bool Experimental, bool Corrupted)>();
+        for (int i = 0; i < item.affixes.Count; i++)
+        {
+            var affix = item.affixes[i];
+            actual.Add((affix.affixId, affix.affixTier, affix.IsExperimental, affix.IsSealedCorrupted));
+        }
 
-        var actual = new List<(int Id, int Tier, bool Experimental)>();
-        for (int i = 0; i < item.affixes.Count; i++) actual.Add((item.affixes[i].affixId, item.affixes[i].affixTier, item.affixes[i].IsExperimental));
-
-        return picks.All(p => actual.Contains((p.Option.AffixId, p.Tier, p.Option.Slot == AffixSlot.Experimental)));
+        return picks.All(p => actual.Contains((p.Option.AffixId, p.Tier, p.Option.Slot == AffixSlot.Experimental, p.Option.Slot == AffixSlot.Corrupted)));
     }
 
     private static string Describe(ItemDataUnpacked item)
@@ -269,7 +286,8 @@ internal static class ItemSpawner
         for (int i = 0; i < item.affixes.Count; i++)
         {
             var affix = item.affixes[i];
-            affixes.Add($"{affix.affixId} tier {affix.affixTier} (shown T{affix.DisplayTier}{(affix.IsExperimental ? ", experimental" : "")})");
+            string kind = affix.specialAffixType == AffixList.SpecialAffixType.Standard ? "" : $", {affix.specialAffixType}";
+            affixes.Add($"{affix.affixId} tier {affix.affixTier} (shown T{affix.DisplayTier}{kind}{(affix.IsSealedCorrupted ? ", sealed" : "")})");
         }
         return $"type {item.itemType}/{item.subType}, unique {item.uniqueID}, rarity {item.rarity}, corrupted {item.IsCorrupted()}, LP {item.legendaryPotential}, affixes [{string.Join(", ", affixes)}]";
     }

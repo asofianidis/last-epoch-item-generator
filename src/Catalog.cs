@@ -10,9 +10,13 @@ internal sealed record CatalogEntry(string Label, int BaseType, int SubType, int
     internal bool IsUniqueOrSet => UniqueId >= 0;
 }
 
-internal enum AffixSlot { Prefix, Suffix, Experimental }
+internal enum AffixSlot { Prefix, Suffix, Experimental, Corrupted, Special }
 
-internal sealed record AffixOption(string Label, int AffixId, AffixSlot Slot, int MaxTierIndex);
+internal sealed record AffixOption(string Label, int AffixId, AffixSlot Slot, int MaxTierIndex)
+{
+    /// <summary>Whether this counts toward a legendary's mods. Corrupted and special affixes come on top of them.</summary>
+    internal bool IsMod => Slot is AffixSlot.Prefix or AffixSlot.Suffix or AffixSlot.Experimental;
+}
 
 internal sealed class AffixPick
 {
@@ -33,6 +37,16 @@ internal static class Catalog
 {
     // Affixes the game marks as incompatible with T6 stop at T5.
     private const int HighestTierIndexWithoutT6 = 4;
+
+    // FakeUniqueMod is left out because it stands in for a unique's mod rather than being an affix to choose.
+    private static readonly AffixList.SpecialAffixType[] LegendaryOnlyTypes =
+    {
+        AffixList.SpecialAffixType.Corrupted,
+        AffixList.SpecialAffixType.Personal,
+        AffixList.SpecialAffixType.Set,
+        AffixList.SpecialAffixType.IdolEnchantment,
+        AffixList.SpecialAffixType.IdolWeaver,
+    };
 
     internal static IReadOnlyList<CatalogEntry> BaseItems { get; private set; } = Array.Empty<CatalogEntry>();
     internal static IReadOnlyList<CatalogEntry> Uniques { get; private set; } = Array.Empty<CatalogEntry>();
@@ -55,11 +69,15 @@ internal static class Catalog
         return true;
     }
 
-    /// <summary>The prefixes, suffixes and experimental affixes the game says can roll on this item, for any class.</summary>
+    /// <summary>The affixes the game says can roll on this item, for any class. Uniques also get corrupted and special affixes, for use on legendaries.</summary>
     internal static List<AffixOption> AffixesFor(CatalogEntry item)
     {
         var options = ReadAffixes(item, AffixList.SpecialAffixType.Standard);
         options.AddRange(ReadAffixes(item, AffixList.SpecialAffixType.Experimental));
+        if (item.IsUniqueOrSet)
+        {
+            foreach (var type in LegendaryOnlyTypes) options.AddRange(ReadAffixes(item, type));
+        }
         return options.OrderBy(o => o.Label, StringComparer.OrdinalIgnoreCase).ToList();
     }
 
@@ -71,24 +89,36 @@ internal static class Catalog
         var compatible = AffixList.get().GetAllCompatibleAffixes(item.BaseType, item.SubType, type);
         if (compatible == null) return options;
 
-        bool experimental = type == AffixList.SpecialAffixType.Experimental;
+        bool legendaryOnly = LegendaryOnlyTypes.Contains(type);
         for (int i = 0; i < compatible.Count; i++)
         {
             var affix = compatible[i];
             if (affix?.tiers == null || affix.tiers.Count == 0) continue;
-            if (!experimental && affix.type == AffixList.AffixType.SPECIAL) continue;
+            if (type == AffixList.SpecialAffixType.Standard && affix.type == AffixList.AffixType.SPECIAL) continue;
+
+            // An affix tied to one unique belongs on that unique only.
+            if (legendaryOnly && affix.uniqueId != 0 && affix.uniqueId != item.UniqueId) continue;
 
             string name = FirstNonEmpty(affix.affixDisplayName, affix.affixName);
             if (name.Length == 0) continue;
 
-            var slot = experimental ? AffixSlot.Experimental : affix.type == AffixList.AffixType.PREFIX ? AffixSlot.Prefix : AffixSlot.Suffix;
+            var slot = SlotFor(type, affix);
             int maxTier = affix.tiers.Count - 1;
             if (affix.t6Compatibility == AffixList.T6Compatibility.Incompatible) maxTier = Math.Min(maxTier, HighestTierIndexWithoutT6);
 
-            options.Add(new AffixOption($"{name} ({slot})", affix.affixId, slot, maxTier));
+            string kind = slot == AffixSlot.Special ? $"Special, {type}" : slot.ToString();
+            options.Add(new AffixOption($"{name} ({kind})", affix.affixId, slot, maxTier));
         }
         return options;
     }
+
+    private static AffixSlot SlotFor(AffixList.SpecialAffixType type, AffixList.Affix affix) => type switch
+    {
+        AffixList.SpecialAffixType.Standard => affix.type == AffixList.AffixType.PREFIX ? AffixSlot.Prefix : AffixSlot.Suffix,
+        AffixList.SpecialAffixType.Experimental => AffixSlot.Experimental,
+        AffixList.SpecialAffixType.Corrupted => AffixSlot.Corrupted,
+        _ => AffixSlot.Special,
+    };
 
     private static List<CatalogEntry> ReadBaseItems(ItemList items)
     {

@@ -137,8 +137,15 @@ internal static class Menu
             y += RowHeight;
         }
 
-        GUI.Label(new Rect(x, y, CorruptionLabelWidth, RowHeight), "Corruption");
-        _corruption = DrawChoice(x + CorruptionLabelWidth, y, w - CorruptionLabelWidth, CorruptionChoices, _corruption);
+        if (ChoosingAffixes && AffixPanel.HasCorruptedPick)
+        {
+            GUI.Label(new Rect(x, y, w, RowHeight), "Corruption: comes from the chosen corrupted affix.");
+        }
+        else
+        {
+            GUI.Label(new Rect(x, y, CorruptionLabelWidth, RowHeight), "Corruption");
+            _corruption = DrawChoice(x + CorruptionLabelWidth, y, w - CorruptionLabelWidth, CorruptionChoices, _corruption);
+        }
         y += RowHeight;
 
         IntSlider(x, ref y, w, "Item level", ref _itemLevel, 1, MaxItemLevel);
