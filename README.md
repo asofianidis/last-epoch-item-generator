@@ -4,8 +4,6 @@ A MelonLoader mod for Last Epoch that creates items on demand in offline play. B
 
 It refuses to generate anything if the game reports online play. Modifying the client is against Last Epoch's terms, so keep it offline.
 
-**Status:** the mod compiles against the game's assemblies but has not yet been run in game. Back up your saves before first use.
-
 ## Using it
 
 1. Load a character into the world and press **F4**. Game input is off while the panel is open.
@@ -61,7 +59,7 @@ Set **Corruption** to corrupt each item the way a Rune of Corruption does, as th
 
 Each result is compared with the request, and differences are reported in the panel and logged. See:
 
-`F:\SteamLibrary\steamapps\common\Last Epoch\MelonLoader\Latest.log`
+`...\steamapps\common\Last Epoch\MelonLoader\Latest.log`
 
 The rarity values and the tier numbering in `src/ItemSpawner.cs` are the most likely things to need correcting, as they could not be confirmed without running the game. If the tier you get doesn't match the slider, the log shows both the stored tier and the tier the game displays.
 
